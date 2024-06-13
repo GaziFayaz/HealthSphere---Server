@@ -1,11 +1,36 @@
+require("dotenv").config();
 const express = require("express");
-const app = express();
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
-require("dotenv").config();
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+
+const app = express();
+const port = process.env.PORT || 5000;
+
+// middleware
+app.use(
+	cors({
+		origin: [
+			"http://localhost:5173",
+			"https://healthsphere-9f7cf.web.app",
+			"https://healthsphere-9f7cf.firebaseapp.com",
+		],
+		credentials: true,
+	})
+);
+app.use(express.json());
+app.use(cookieParser());
+
+const cookieOptions = {
+	httpOnly: true,
+	sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+	secure: process.env.NODE_ENV === "production" ? true : false,
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.udmqtzd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
 	serverApi: {
@@ -14,28 +39,8 @@ const client = new MongoClient(uri, {
 		deprecationErrors: true,
 	},
 });
-
-const port = process.env.PORT || 5000;
-
-// Middleware
-app.use(
-	cors({
-		origin: ["http://localhost:5173"],
-		credentials: true,
-	})
-);
-app.use(express.json());
-
 async function run() {
 	try {
-		// Connect the client to the server	(optional starting in v4.7)
-		// await client.connect();
-		// Send a ping to confirm a successful connection
-		await client.db("admin").command({ ping: 1 });
-		console.log(
-			"Pinged your deployment. You successfully connected to MongoDB!"
-		);
-
 		const userCollection = client
 			.db("B9A12-Medicine-E-Commerce")
 			.collection("users");
@@ -47,69 +52,86 @@ async function run() {
 			.collection("categories");
 		// const userCollection  = client.db("B9A12-Medicine-E-Commerce")
 
-
-    const verifyToken = (req, res, next) => {
-      const token = req.cookies.token;
-    
-      console.log("token in the middleware", token);
-    
-      if (!token) {
-        return res.status(401).send({ message: "Unauthorized Access" });
-      }
-    
-      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-        if (err) {
-          return res.status(403).send({ message: "Forbidden Access" });
-        }
-    
-        req.user = decoded;
-        next();
-      });
-    };
-
 		app.post("/jwt", async (req, res) => {
-			try {
-				const user = req.body;
-				const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-					expiresIn: "1h",
-				});
+			const user = req.body;
+			// console.log(user);
 
-				res.cookie("token", token, {
-					httpOnly: true,
-					// secure: process.env.NODE_ENV === "production",
-					secure: false,
-					sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
-				});
-			} catch (error) {
-				res.send({
-					status: true,
-					error: error.message,
-				});
-			}
+			const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+				expiresIn: "1h",
+			});
+
+			res.cookie("token", token, cookieOptions).send({ success: true });
 		});
 
 		app.post("/logout", async (req, res) => {
 			const user = req.body;
 			res
 				.clearCookie("token", {
+					...cookieOptions,
 					maxAge: 0,
-					// secure: process.env.NODE_ENV === "production" ? true : false,
-					secure: false,
-					sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
 				})
-				.send({ status: true });
+				.send({ success: true });
 		});
+
+		app.post("/users", async (req, res) => {
+			const newUser = req.body;
+			// console.log(newUser);
+			if (!(await userCollection.findOne({ email: newUser.email }))) {
+				const result = await userCollection.insertOne(newUser);
+				// console.log(result);
+				res.send(result);
+			}
+			res.send({ message: 'user already exists', insertedId: null })
+		});
+
+		app.get("/users", async (req, res) => {
+			const cursor = userCollection.find();
+			const result = await cursor.toArray();
+			res.send(result);
+		});
+
+		app.get("/categories", async (req, res) => {
+			const result = await categoryCollection.find().toArray();
+			res.send(result)
+		})
+
+		app.get(`/categories/:slug`, async (req, res) => {
+			const {slug} = req.params
+			const categoryDetails = await categoryCollection.findOne({slug})
+			console.log(categoryDetails.productIds)
+			const categoryProducts = await productCollection.find({_id: {$in: categoryDetails.productIds}}).toArray()
+			console.log({...categoryDetails, categoryProducts})
+			res.send({...categoryDetails, categoryProducts})
+		})
+
+		app.get("/products", async (req, res) => {
+			const queries = req.query;
+			const result = await productCollection
+				.find({
+					// category_name: queries?.category_name? queries.category_name : { $exists: true }
+					...queries,
+				})
+				.toArray();
+			console.log(result);
+			res.send(result);
+		});
+
+
+		// Send a ping to confirm a successful connection
+		await client.db("admin").command({ ping: 1 });
+		console.log(
+			"Pinged your deployment. You successfully connected to MongoDB!"
+		);
 	} finally {
 		// Ensures that the client will close when you finish/error
-		// await client.close();
 	}
 }
+run().catch(console.dir);
 
-
-app.get('/', (req, res) => {
-  res.send("Server is running")
-})
+app.get(`/`, (req, res) => {
+	res.send("Server is running");
+});
 
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`)
-})
+	console.log(`Server is running on port: ${port}`);
+});
