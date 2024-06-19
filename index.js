@@ -288,6 +288,16 @@ async function run() {
 			}
 		);
 
+		app.delete("/carts/clear/:cartId", verifyToken, async (req, res) => {
+			const _id = req.params.cartId
+			const result = await cartCollection.updateOne({
+				_id: new ObjectId(_id)
+			}, {
+				$set: {cartItems: []}
+			})
+			res.send(result)
+		})
+
 		// Send a ping to confirm a successful connection
 		await client.db("admin").command({ ping: 1 });
 		console.log(
