@@ -264,22 +264,25 @@ async function run() {
 							if (item.quantity > 1) {
 								item.quantity -= 1;
 							} else {
-								const result = await cartCollection.updateOne({
-									_id: new ObjectId(_id),								
-								}, {
-									$pull: { cartItems: { productId: newItem._id } }
-								})
-								res.send(result)
-								return
+								const result = await cartCollection.updateOne(
+									{
+										_id: new ObjectId(_id),
+									},
+									{
+										$pull: { cartItems: { productId: newItem._id } },
+									}
+								);
+								res.send(result);
+								return;
 							}
-							const result = await cartCollection.updateOne(
-								{ _id: new ObjectId(_id) },
-								{
-									$set: { cartItems: cart.cartItems },
-								}
-							);
-							res.send(result);
 						}
+						const result = await cartCollection.updateOne(
+							{ _id: new ObjectId(_id) },
+							{
+								$set: { cartItems: cart.cartItems },
+							}
+						);
+						res.send(result);
 					}
 				});
 			}
