@@ -348,11 +348,13 @@ async function run() {
 
 		app.get("/orders", verifyToken, async (req, res) => {
 			const orders = await orderCollection
-				.find({ user_email: req.decoded.email })
+				.find({ email: req.decoded.email })
+				.sort( { date: -1} )
 				.toArray();
+
+			console.log(orders);
 			res.send(orders);
 		});
-		
 
 		// Send a ping to confirm a successful connection
 		await client.db("admin").command({ ping: 1 });
