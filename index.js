@@ -54,14 +54,25 @@ async function run() {
 		const cartCollection = client
 			.db("B9A12-Medicine-E-Commerce")
 			.collection("carts");
+		const orderCollection = client
+			.db("B9A12-Medicine-E-Commerce")
+			.collection("orders");
 
 		app.post("/jwt", async (req, res) => {
 			const user = req.body;
 			// console.log(user);
 
-			const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-				expiresIn: "9999999h",
+			const user_data = await userCollection.findOne({
+				user_email: user.email,
 			});
+
+			const token = jwt.sign(
+				{ email: user.email, role: user_data.role },
+				process.env.ACCESS_TOKEN_SECRET,
+				{
+					expiresIn: "9999999h",
+				}
+			);
 
 			res.cookie("token", token, cookieOptions).send({ success: true });
 		});
@@ -98,6 +109,15 @@ async function run() {
 				return res.status(403).send({ message: "Forbidden access" });
 			next();
 		};
+
+		app.get("/users/role", verifyToken, async (req, res) => {
+			const query = { user_email: req.decoded.email };
+			const user = await userCollection.findOne(query);
+			if (user) {
+				role = user.role;
+			}
+			res.send(role);
+		});
 
 		app.post("/users", async (req, res) => {
 			const newUser = req.body;
@@ -290,32 +310,49 @@ async function run() {
 		);
 
 		app.delete("/carts/clear/:cartId", verifyToken, async (req, res) => {
-			const _id = req.params.cartId
-			const result = await cartCollection.updateOne({
-				_id: new ObjectId(_id)
-			}, {
-				$set: {cartItems: []}
-			})
-			res.send(result)
-		}) 
+			const _id = req.params.cartId;
+			const result = await cartCollection.updateOne(
+				{
+					_id: new ObjectId(_id),
+				},
+				{
+					$set: { cartItems: [] },
+				}
+			);
+			res.send(result);
+		});
 
 		// payment intent
 		app.post("/create-payment-intent", async (req, res) => {
-			const { price } = req.body; 
-			console.log("price", price)
+			const { price } = req.body;
+			console.log("price", price);
 			const amount = parseInt(price * 100);
-		
+
 			// Create a PaymentIntent with the order amount and currency
 			const paymentIntent = await stripe.paymentIntents.create({
-				amount:	amount,
+				amount: amount,
 				currency: "bdt",
 				payment_method_types: ["card"],
 			});
-		
+
 			res.send({
 				clientSecret: paymentIntent.client_secret,
 			});
 		});
+
+		app.post("/create-order", verifyToken, async (req, res) => {
+			const order = req.body;
+			const result = await orderCollection.insertOne(order);
+			res.send(result);
+		});
+
+		app.get("/orders", verifyToken, async (req, res) => {
+			const orders = await orderCollection
+				.find({ user_email: req.decoded.email })
+				.toArray();
+			res.send(orders);
+		});
+		
 
 		// Send a ping to confirm a successful connection
 		await client.db("admin").command({ ping: 1 });
