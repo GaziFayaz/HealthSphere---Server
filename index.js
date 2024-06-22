@@ -273,6 +273,21 @@ async function run() {
 			res.send(result);
 		});
 
+		app.post("/products", verifyToken, verifySeller, async (req, res) => {
+			const seller_email = req.decoded.email;
+			const user = await userCollection.findOne({ user_email: seller_email });
+			const manufacturer_name = user.name;
+			const newProduct = { ...req.body, seller_email, manufacturer_name };
+			const result = await productCollection.insertOne(newProduct)
+			res.send(result)
+		})
+
+		app.get("/seller-products", verifyToken, verifySeller, async (req, res) => {
+			const seller_email = req.decoded.email
+			const result = await productCollection.find({ seller_email}).toArray()
+			res.send(result)
+		})
+
 		app.get("/carts", verifyToken, async (req, res) => {
 			if (req.decoded.email !== req.query.email) {
 				console.log(req.decoded.user_email, req.query.email);
@@ -281,13 +296,6 @@ async function run() {
 			const cart = await cartCollection.findOne({
 				user_email: req.query.email,
 			});
-			// const result = await Promise.all(cart.cartItems.map(async (item) => {
-			// 	const product = await productCollection.findOne({
-			// 		_id: new ObjectId(item.productId),
-			// 	});
-			// 	return { product, quantity: item.quantity };
-			// }));
-
 			const result = await productCollection
 				.find({
 					_id: {
