@@ -61,13 +61,8 @@ async function run() {
 		app.post("/jwt", async (req, res) => {
 			const user = req.body;
 			// console.log(user);
-
-			const user_data = await userCollection.findOne({
-				user_email: user.email,
-			});
-
 			const token = jwt.sign(
-				{ email: user.email, role: user_data.role },
+				{ email: user.email },
 				process.env.ACCESS_TOKEN_SECRET,
 				{
 					expiresIn: "9999999h",
@@ -102,21 +97,63 @@ async function run() {
 
 		const verifyAdmin = async (req, res, next) => {
 			const email = req.decoded.email;
-			const query = { email: email };
+			const query = { user_email: email };
 			const user = await userCollection.findOne(query);
-			const isAdmin = user?.role === "admin";
+			const isAdmin = user?.role === "Admin";
 			if (!isAdmin)
 				return res.status(403).send({ message: "Forbidden access" });
 			next();
 		};
 
-		app.get("/users/role", verifyToken, async (req, res) => {
-			const query = { user_email: req.decoded.email };
-			const user = await userCollection.findOne(query);
-			if (user) {
-				role = user.role;
+		app.get("/users/customer/:email", verifyToken, async (req, res) => {
+			const email = req.params.email;
+
+			if (email !== req.decoded.email) {
+				return res.status(403).send({ message: "forbidden access" });
 			}
-			res.send(role);
+
+			const query = { user_email: email };
+			const user = await userCollection.findOne(query);
+			let customer = false;
+			if (user) {
+				customer = user?.role === "Customer";
+			}
+			console.log({ customer });
+			res.send({ customer });
+		});
+
+		app.get("/users/seller/:email", verifyToken, async (req, res) => {
+			const email = req.params.email;
+
+			if (email !== req.decoded.email) {
+				return res.status(403).send({ message: "forbidden access" });
+			}
+
+			const query = { user_email: email };
+			const user = await userCollection.findOne(query);
+			let seller = false;
+			if (user) {
+				seller = user?.role === "Seller";
+			}
+			console.log({ seller });
+			res.send({ seller });
+		});
+
+		app.get("/users/admin/:email", verifyToken, async (req, res) => {
+			const email = req.params.email;
+
+			if (email !== req.decoded.email) {
+				return res.status(403).send({ message: "forbidden access" });
+			}
+
+			const query = { user_email: email };
+			const user = await userCollection.findOne(query);
+			let admin = false;
+			if (user) {
+				admin = user?.role === "Admin";
+			}
+			console.log({ admin });
+			res.send({ admin });
 		});
 
 		app.post("/users", async (req, res) => {
@@ -131,20 +168,38 @@ async function run() {
 			}
 		});
 
-		app.get("/users", async (req, res) => {
+		app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
 			const cursor = userCollection.find();
 			const result = await cursor.toArray();
 			res.send(result);
 		});
+
+		app.post(
+			"/users/change-role",
+			verifyToken,
+			verifyAdmin,
+			async (req, res) => {
+				const { user_email, role } = req.body;
+				console.log(req.body);
+				const result = await userCollection.updateOne(
+					{ user_email: user_email },
+					{ $set: { role } }
+				);
+				console.log(result);
+				res.send(result);
+			}
+		);
 
 		app.get("/categories", async (req, res) => {
 			const result = await categoryCollection.find().toArray();
 			res.send(result);
 		});
 
-		app.get(`/categories/:slug`, async (req, res) => {
-			const { slug } = req.params;
-			const categoryDetails = await categoryCollection.findOne({ slug });
+		app.get(`/categories/:categoryId`, async (req, res) => {
+			const { categoryId } = req.params;
+			const categoryDetails = await categoryCollection.findOne({
+				_id: new ObjectId(categoryId),
+			});
 			console.log(categoryDetails.productIds);
 			const categoryProducts = await productCollection
 				.find({ _id: { $in: categoryDetails.productIds } })
@@ -153,21 +208,40 @@ async function run() {
 			res.send({ ...categoryDetails, categoryProducts });
 		});
 
-		app.get("/update-categories", async (req, res) => {
-			const categories = await categoryCollection.find().toArray();
-			const products = await productCollection.find().toArray();
-			categories.forEach(async (category) => {
-				const categoryProducts = products.filter(
-					(product) => product.category_name === category.name
-				);
-				const productIds = categoryProducts.map((product) => product._id);
-				await categoryCollection.updateOne(
-					{ name: category.name },
-					{ $set: { productIds } }
-				);
-			});
-			res.send({ success: true });
+		app.post("/categories", verifyToken, verifyAdmin, async (req, res) => {
+			const newCategory = req.body;
+			const result = await categoryCollection.insertOne(newCategory);
+			res.send(result);
 		});
+
+		app.post(
+			"/update-categories/:categoryId",
+			verifyToken,
+			verifyAdmin,
+			async (req, res) => {
+				const { categoryId } = req.params;
+				console.log(categoryId, req.body);
+				const updatedCategory = req.body;
+				const result = await categoryCollection.updateOne(
+					{ _id: new ObjectId(categoryId) },
+					{ $set: updatedCategory }
+				);
+				res.send(result);
+			}
+		);
+
+		app.delete(
+			"/categories/:categoryId",
+			verifyToken,
+			verifyAdmin,
+			async (req, res) => {
+				const { categoryId } = req.params;
+				const result = await categoryCollection.deleteOne({
+					_id: new ObjectId(categoryId),
+				});
+				res.send(result);
+			}
+		);
 
 		app.get("/update-products", async (req, res) => {
 			await productCollection.updateMany(
@@ -346,14 +420,69 @@ async function run() {
 			res.send(result);
 		});
 
+		app.patch(
+			"/update-payment-status/:orderId",
+			verifyToken,
+			verifyAdmin,
+			async (req, res) => {
+				const { orderId } = req.params;
+				const order = await orderCollection.findOne({
+					_id: new ObjectId(orderId),
+				});
+				let result = {};
+				await orderCollection
+					.updateOne(
+						{
+							_id: new ObjectId(orderId),
+						},
+						{
+							$set: { status: "paid" },
+						}
+					)
+					.then((result) => {
+						order.items.forEach(async (item) => {
+							const sellerQuery = { user_email: item.seller_email };
+							await userCollection.updateMany(sellerQuery, {
+								$push: { soldItems: item },
+							});
+						});
+						res.send(result);
+					});
+			}
+		);
+
 		app.get("/orders", verifyToken, async (req, res) => {
 			const orders = await orderCollection
 				.find({ email: req.decoded.email })
-				.sort( { date: -1} )
+				.sort({ date: -1 })
 				.toArray();
 
 			console.log(orders);
 			res.send(orders);
+		});
+
+		app.get("/orders/all", verifyToken, verifyAdmin, async (req, res) => {
+			const orders = await orderCollection.find().toArray();
+			res.send(orders);
+		});
+
+		app.get("/total-sales", verifyToken, verifyAdmin, async (req, res) => {
+			const orders = await orderCollection.find().toArray();
+			console.log(orders);
+			const totalSales = orders.reduce((acc, order) => acc + order.price, 0);
+			const totalPaid = orders.reduce((acc, order) => {
+				if (order.status === "paid") {
+					return acc + order.price;
+				} else return acc;
+			}, 0);
+			const totalPending = orders.reduce((acc, order) => {
+				console.log("initialValue", acc);
+				if (order.status === "pending") {
+					return acc + order.price;
+				} else return acc;
+			}, 0);
+			console.log(totalSales, totalPaid, totalPending);
+			res.send({ totalSales, totalPaid, totalPending });
 		});
 
 		// Send a ping to confirm a successful connection
