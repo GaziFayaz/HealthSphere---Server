@@ -95,6 +95,16 @@ async function run() {
 			});
 		};
 
+		const verifySeller = async (req, res, next) => {
+			const email = req.decoded.email;
+			const query = { user_email: email };
+			const user = await userCollection.findOne(query);
+			const isSeller = user?.role === "Seller";
+			if (!isSeller)
+				return res.status(403).send({ message: "Forbidden access" });
+			next();
+		};
+
 		const verifyAdmin = async (req, res, next) => {
 			const email = req.decoded.email;
 			const query = { user_email: email };
@@ -416,8 +426,15 @@ async function run() {
 
 		app.post("/create-order", verifyToken, async (req, res) => {
 			const order = req.body;
-			const result = await orderCollection.insertOne(order);
-			res.send(result);
+			await orderCollection.insertOne(order).then((result) => {
+				order.items.forEach(async (item) => {
+					const sellerQuery = { user_email: item.seller_email };
+					await userCollection.updateMany(sellerQuery, {
+						$push: { pendingItems: item },
+					});
+				});
+				res.send(result);
+			});
 		});
 
 		app.patch(
@@ -444,6 +461,9 @@ async function run() {
 							const sellerQuery = { user_email: item.seller_email };
 							await userCollection.updateMany(sellerQuery, {
 								$push: { soldItems: item },
+							});
+							await userCollection.updateMany(sellerQuery, {
+								$pull: { pendingItems: { _id: item._id } },
 							});
 						});
 						res.send(result);
@@ -484,6 +504,34 @@ async function run() {
 			console.log(totalSales, totalPaid, totalPending);
 			res.send({ totalSales, totalPaid, totalPending });
 		});
+
+		app.get(
+			"/seller-total-sales",
+			verifyToken,
+			verifySeller,
+			async (req, res) => {
+				const user = await userCollection.findOne({
+					user_email: req.decoded.email,
+				});
+				let totalPaid = 0;
+				let totalPending = 0;
+				let totalSales = 0;
+				if (user.soldItems?.length !== 0) {
+					totalPaid = user.soldItems.reduce((acc, item) => {
+						return acc + item.unit_prices[0].price * item.quantity;
+					}, 0);
+				}
+
+				if (user.pendingItems?.length !== 0) {
+					totalPending = user.pendingItems.reduce((acc, item) => {
+						return acc + item.unit_prices[0].price * item.quantity;
+					}, 0);
+				}
+
+				totalSales = totalPaid + totalPending;
+				res.send({ totalSales, totalPaid, totalPending });
+			}
+		);
 
 		// Send a ping to confirm a successful connection
 		await client.db("admin").command({ ping: 1 });
