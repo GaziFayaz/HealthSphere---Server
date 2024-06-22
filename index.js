@@ -84,7 +84,7 @@ async function run() {
 
 		// middlewares
 		const verifyToken = (req, res, next) => {
-			console.log("got hit in verity token");
+			// console.log("got hit in verity token");
 			const token = req?.cookies?.token;
 			if (!token)
 				return res.status(401).send({ message: "Unauthorized access" });
@@ -116,53 +116,38 @@ async function run() {
 		};
 
 		app.get("/users/customer/:email", verifyToken, async (req, res) => {
-			const email = req.params.email;
 
-			if (email !== req.decoded.email) {
-				return res.status(403).send({ message: "forbidden access" });
-			}
-
-			const query = { user_email: email };
+			const query = { user_email: req.decoded.email };
 			const user = await userCollection.findOne(query);
 			let customer = false;
 			if (user) {
 				customer = user?.role === "Customer";
 			}
-			console.log({ customer });
+			// console.log({ customer });
 			res.send({ customer });
 		});
 
 		app.get("/users/seller/:email", verifyToken, async (req, res) => {
-			const email = req.params.email;
 
-			if (email !== req.decoded.email) {
-				return res.status(403).send({ message: "forbidden access" });
-			}
-
-			const query = { user_email: email };
+			const query = { user_email: req.decoded.email };
 			const user = await userCollection.findOne(query);
 			let seller = false;
 			if (user) {
 				seller = user?.role === "Seller";
 			}
-			console.log({ seller });
+			// console.log({ seller });
 			res.send({ seller });
 		});
 
 		app.get("/users/admin/:email", verifyToken, async (req, res) => {
-			const email = req.params.email;
 
-			if (email !== req.decoded.email) {
-				return res.status(403).send({ message: "forbidden access" });
-			}
-
-			const query = { user_email: email };
+			const query = { user_email: req.decoded.email };
 			const user = await userCollection.findOne(query);
 			let admin = false;
 			if (user) {
 				admin = user?.role === "Admin";
 			}
-			console.log({ admin });
+			// console.log({ admin });
 			res.send({ admin });
 		});
 
@@ -190,12 +175,12 @@ async function run() {
 			verifyAdmin,
 			async (req, res) => {
 				const { user_email, role } = req.body;
-				console.log(req.body);
+				// console.log(req.body);
 				const result = await userCollection.updateOne(
 					{ user_email: user_email },
 					{ $set: { role } }
 				);
-				console.log(result);
+				// console.log(result);
 				res.send(result);
 			}
 		);
@@ -210,11 +195,11 @@ async function run() {
 			const categoryDetails = await categoryCollection.findOne({
 				_id: new ObjectId(categoryId),
 			});
-			console.log(categoryDetails.productIds);
+			// console.log(categoryDetails.productIds);
 			const categoryProducts = await productCollection
 				.find({ _id: { $in: categoryDetails.productIds } })
 				.toArray();
-			console.log({ ...categoryDetails, categoryProducts });
+			// console.log({ ...categoryDetails, categoryProducts });
 			res.send({ ...categoryDetails, categoryProducts });
 		});
 
@@ -230,7 +215,7 @@ async function run() {
 			verifyAdmin,
 			async (req, res) => {
 				const { categoryId } = req.params;
-				console.log(categoryId, req.body);
+				// console.log(categoryId, req.body);
 				const updatedCategory = req.body;
 				const result = await categoryCollection.updateOne(
 					{ _id: new ObjectId(categoryId) },
@@ -290,7 +275,7 @@ async function run() {
 
 		app.get("/carts", verifyToken, async (req, res) => {
 			if (req.decoded.email !== req.query.email) {
-				console.log(req.decoded.user_email, req.query.email);
+				// console.log(req.decoded.user_email, req.query.email);
 				return res.status(403).send({ message: "Forbidden access" });
 			}
 			const cart = await cartCollection.findOne({
@@ -417,7 +402,7 @@ async function run() {
 		// payment intent
 		app.post("/create-payment-intent", async (req, res) => {
 			const { price } = req.body;
-			console.log("price", price);
+			// console.log("price", price);
 			const amount = parseInt(price * 100);
 
 			// Create a PaymentIntent with the order amount and currency
@@ -485,7 +470,7 @@ async function run() {
 				.sort({ date: -1 })
 				.toArray();
 
-			console.log(orders);
+			// console.log(orders);
 			res.send(orders);
 		});
 
@@ -496,7 +481,7 @@ async function run() {
 
 		app.get("/total-sales", verifyToken, verifyAdmin, async (req, res) => {
 			const orders = await orderCollection.find().toArray();
-			console.log(orders);
+			// console.log(orders);
 			const totalSales = orders.reduce((acc, order) => acc + order.price, 0);
 			const totalPaid = orders.reduce((acc, order) => {
 				if (order.status === "paid") {
@@ -504,12 +489,12 @@ async function run() {
 				} else return acc;
 			}, 0);
 			const totalPending = orders.reduce((acc, order) => {
-				console.log("initialValue", acc);
+				// console.log("initialValue", acc);
 				if (order.status === "pending") {
 					return acc + order.price;
 				} else return acc;
 			}, 0);
-			console.log(totalSales, totalPaid, totalPending);
+			// console.log(totalSales, totalPaid, totalPending);
 			res.send({ totalSales, totalPaid, totalPending });
 		});
 
@@ -543,9 +528,9 @@ async function run() {
 
 		// Send a ping to confirm a successful connection
 		await client.db("admin").command({ ping: 1 });
-		console.log(
-			"Pinged your deployment. You successfully connected to MongoDB!"
-		);
+		// console.log(
+		// 	"Pinged your deployment. You successfully connected to MongoDB!"
+		// );
 	} finally {
 		// Ensures that the client will close when you finish/error
 	}
@@ -557,5 +542,5 @@ app.get(`/`, (req, res) => {
 });
 
 app.listen(port, () => {
-	console.log(`Server is running on port: ${port}`);
+	// console.log(`Server is running on port: ${port}`);
 });
