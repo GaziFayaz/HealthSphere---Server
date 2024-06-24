@@ -115,9 +115,9 @@ async function run() {
 			next();
 		};
 
-		app.get("/users/customer/:email", verifyToken, async (req, res) => {
+		app.get("/users/customer/:email", async (req, res) => {
 
-			const query = { user_email: req.decoded.email };
+			const query = { user_email: req.params.email };
 			const user = await userCollection.findOne(query);
 			let customer = false;
 			if (user) {
@@ -127,9 +127,9 @@ async function run() {
 			res.send({ customer });
 		});
 
-		app.get("/users/seller/:email", verifyToken, async (req, res) => {
+		app.get("/users/seller/:email", async (req, res) => {
 
-			const query = { user_email: req.decoded.email };
+			const query = { user_email: req.params.email };
 			const user = await userCollection.findOne(query);
 			let seller = false;
 			if (user) {
@@ -139,9 +139,9 @@ async function run() {
 			res.send({ seller });
 		});
 
-		app.get("/users/admin/:email", verifyToken, async (req, res) => {
+		app.get("/users/admin/:email", async (req, res) => {
 
-			const query = { user_email: req.decoded.email };
+			const query = { user_email: req.params.email };
 			const user = await userCollection.findOne(query);
 			let admin = false;
 			if (user) {
@@ -257,6 +257,13 @@ async function run() {
 			// console.log(result);
 			res.send(result);
 		});
+
+		app.get("/discounted-products", async (req, res) => {
+			const result = await productCollection.find({
+				is_discountable: true
+			}).toArray();
+			res.send(result)
+		})
 
 		app.post("/products", verifyToken, verifySeller, async (req, res) => {
 			const seller_email = req.decoded.email;
